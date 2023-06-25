@@ -61,6 +61,10 @@ def sequential_generation(img_name, model, clip, tokenizer, image_instance,token
     best_caption_list = ['None'] * batch_size
     inp = torch.tensor(batch).to(image_embeds.device)
     gen_texts_list = []
+
+    print(batch)
+
+    
     for iter_num in range(max_iters): 
         for ii in range(max_len):
             token_mask = update_token_mask(tokenizer, token_mask, max_len, ii)
