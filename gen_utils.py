@@ -48,25 +48,35 @@ def generate_caption_step(out, gen_idx, mask, temperature=None, top_k=100):
 
     return top_k_probs, top_k_ids
 
-def sequential_generation(img_name, model, clip, tokenizer, image_instance,token_mask, prompt, logger,
+def gen_goodcap(blip, vis_processors, image_instance, device):
+    image = vis_processors["eval"](image_instance).unsqueeze(0).to(device)
+    FinalCaption = blip.generate({"image": image})
+    return FinalCaption[0]
+
+def sequential_generation(img_name, blip, vis_processors, model, clip, tokenizer, image_instance,token_mask, prompt, logger,
                           max_len=15, top_k=100,temperature=None, alpha=0.7,beta=1,
                           max_iters=20,batch_size=1, verbose=True):
     """ Generate one word at a time, in L->R order """
 
     seed_len = len(prompt.split())+1
-    batch = get_init_text(tokenizer, prompt, max_len, batch_size)
     image_embeds = clip.compute_image_representation_from_image_instance(image_instance)
+
+    init_prompt = prompt + ' ' + gen_goodcap(blip, vis_processors, image_instance, image_embeds.device) 
+
+    max_len = len(init_prompt.split()) 
+
+    batch = get_init_text(tokenizer, init_prompt, 0, batch_size)
+    # batch = get_init_text(tokenizer, prompt, max_len, batch_size)
+
+    
     clip_score_sequence = []
     best_clip_score_list = [0] * batch_size
     best_caption_list = ['None'] * batch_size
     inp = torch.tensor(batch).to(image_embeds.device)
     gen_texts_list = []
 
-    print(batch)
-
-    
     for iter_num in range(max_iters): 
-        for ii in range(max_len):
+        for ii in range(max_len - seed_len):
             token_mask = update_token_mask(tokenizer, token_mask, max_len, ii)
             inp[:,seed_len + ii] = tokenizer.mask_token_id
             inp_ = inp.clone().detach()
@@ -290,15 +300,17 @@ def parallel_generation(img_name, model, clip, tokenizer,image_instance,token_ma
     clip_score_sequence.append(best_clip_score_list)
     return gen_texts_list, clip_score_sequence
 
-def generate_caption(img_name, model, clip, tokenizer,image_instance,token_mask,logger,
-                     prompt="", batch_size=1, max_len=15,
-                     top_k=100, temperature=1.0, max_iter=500,alpha=0.7,beta=1,
-                     generate_order="sequential"):
+def generate_caption(img_name, 
+                    blip, vis_processors,
+                    model, clip, tokenizer, image_instance,token_mask,logger,
+                    prompt="", batch_size=1, max_len=15,
+                    top_k=100, temperature=1.0, max_iter=500,alpha=0.7,beta=1,
+                    generate_order="sequential"):
     # main generation functions to call
     start_time = time.time()
 
     if generate_order=="sequential":
-        generate_texts, clip_scores = sequential_generation(img_name, model, clip, tokenizer, image_instance, token_mask, prompt, logger,
+        generate_texts, clip_scores = sequential_generation(img_name, blip, vis_processors, model, clip, tokenizer, image_instance, token_mask, prompt, logger,
                                  batch_size=batch_size, max_len=max_len, top_k=top_k,
                                  alpha=alpha,beta=beta,temperature=temperature,
                                  max_iters=max_iter)
