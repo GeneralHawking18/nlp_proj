@@ -67,7 +67,7 @@ def sequential_generation(img_name, blip, vis_processors, model, clip, tokenizer
 
     batch = get_init_text(tokenizer, init_prompt, 0, batch_size)
     # batch = get_init_text(tokenizer, prompt, max_len, batch_size)
-
+    theta = 10
     
     clip_score_sequence = []
     best_clip_score_list = [0] * batch_size
@@ -85,11 +85,18 @@ def sequential_generation(img_name, blip, vis_processors, model, clip, tokenizer
             topk_inp = inp_.unsqueeze(1).repeat(1,top_k,1)
             idxs_ = (idxs * token_mask[0][idxs]).long()
             topk_inp[:,:,ii + seed_len] = idxs_
+
             topk_inp_batch = topk_inp.view(-1,topk_inp.shape[-1])
             batch_text_list= tokenizer.batch_decode(topk_inp_batch , skip_special_tokens=True)
+            # print(batch_text_list)
+            blip_text_embed = clip.compute_text_representation([init_prompt])
             clip_score, clip_ref = clip.compute_image_text_similarity_via_raw_text(image_embeds, batch_text_list)
-            final_score = alpha * probs + beta * clip_score
+            blip_sim_score, blip_sim_ref = clip.compute_image_text_similarity_via_raw_text(blip_text_embed, batch_text_list)
+
+            final_score = alpha * probs + beta * clip_score + theta * blip_sim_score
             best_clip_id = final_score.argmax(dim=1).view(-1,1)
+
+
             inp[:,seed_len + ii] = idxs_.gather(1, best_clip_id).squeeze(-1)
             current_clip_score = clip_ref.gather(1,best_clip_id).squeeze(-1)
             clip_score_sequence_batch = current_clip_score.cpu().detach().numpy().tolist()
