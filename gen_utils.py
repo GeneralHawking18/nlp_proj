@@ -61,22 +61,30 @@ def sequential_generation(img_name, blip, vis_processors, model, clip, tokenizer
     seed_len = len(prompt.split())+1
     image_embeds = clip.compute_image_representation_from_image_instance(image_instance)
 
-    init_prompt = prompt + ' ' + gen_goodcap(blip, vis_processors, image_instance, image_embeds.device) 
+    
+    good_cap = gen_goodcap(blip, vis_processors, image_instance, image_embeds.device) 
+    init_prompt = prompt + ' ' + good_cap 
 
-    max_len = len(init_prompt.split()) 
 
-    batch = get_init_text(tokenizer, init_prompt, 0, batch_size)
+    max_len_init = len(init_prompt.split()) 
+    max_len_good_cap = len(good_cap.split()) 
+    # print(max_len_good_cap)
+
+    batch = get_init_text(tokenizer, init_prompt, max_len - max_len_good_cap, batch_size)
+    # print(max_len - max_len_init)
     # batch = get_init_text(tokenizer, prompt, max_len, batch_size)
-    theta = 10
+    theta = 5
     
     clip_score_sequence = []
     best_clip_score_list = [0] * batch_size
     best_caption_list = ['None'] * batch_size
     inp = torch.tensor(batch).to(image_embeds.device)
     gen_texts_list = []
+    blip_text_embed = clip.compute_text_representation([init_prompt])
 
     for iter_num in range(max_iters): 
-        for ii in range(max_len - seed_len):
+        for ii in range(max_len):
+            # print(seed_len + ii)
             token_mask = update_token_mask(tokenizer, token_mask, max_len, ii)
             inp[:,seed_len + ii] = tokenizer.mask_token_id
             inp_ = inp.clone().detach()
@@ -89,8 +97,9 @@ def sequential_generation(img_name, blip, vis_processors, model, clip, tokenizer
             topk_inp_batch = topk_inp.view(-1,topk_inp.shape[-1])
             batch_text_list= tokenizer.batch_decode(topk_inp_batch , skip_special_tokens=True)
             # print(batch_text_list)
-            blip_text_embed = clip.compute_text_representation([init_prompt])
+           
             clip_score, clip_ref = clip.compute_image_text_similarity_via_raw_text(image_embeds, batch_text_list)
+
             blip_sim_score, blip_sim_ref = clip.compute_image_text_similarity_via_raw_text(blip_text_embed, batch_text_list)
 
             final_score = alpha * probs + beta * clip_score + theta * blip_sim_score
