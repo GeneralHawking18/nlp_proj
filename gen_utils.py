@@ -413,7 +413,6 @@ def generate_caption(img_name,
 
 
     if generate_order == "precise":
-        print(1)
         generate_texts, clip_scores = precise_generation(
             img_name, 
             model, clip, tokenizer, 
