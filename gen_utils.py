@@ -176,10 +176,11 @@ def precise_generation(
             topk_inp_batch = topk_inp.view(-1,topk_inp.shape[-1])
             batch_text_list= tokenizer.batch_decode(topk_inp_batch , skip_special_tokens=True)
             # print(batch_text_list)2    
-           
-            clip_score, clip_ref = clip.compute_image_text_similarity_via_raw_text(image_embeds, batch_text_list)
+            batch_text_emds = clip.compute_text_representation(batch_text_list)
+            clip_score, clip_ref = clip.compute_image_text_similarity_via_embeddings(image_embeds, batch_text_emds)
 
-            cap_sim_score, cap_sim_ref = clip.compute_image_text_similarity_via_raw_text(init_text_embed, batch_text_list)
+
+            cap_sim_score, cap_sim_ref = clip.compute_image_text_similarity_via_embeddings(init_text_embed, batch_text_emds)
 
             final_score = alpha * probs + beta * clip_score + theta * cap_sim_score
             best_clip_id = final_score.argmax(dim=1).view(-1,1)
