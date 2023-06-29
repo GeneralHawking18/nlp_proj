@@ -6,6 +6,16 @@ from typing import Any, Callable, Optional, Tuple, List
 from torch.utils.data import Dataset, DataLoader
 import json
 
+def collate_img(batch_data):
+    img_path_batch_list = list()
+    name_batch_list = list()
+    init_caption_list = list()
+    for unit in batch_data:
+        img_path_batch_list.append(unit[0])
+        name_batch_list.append(unit[1])
+        init_caption_list.append(unit[2])
+    return img_path_batch_list,name_batch_list, init_caption_list[0]
+
 class CocoDetection(VisionDataset):
     def __init__(
         self,
