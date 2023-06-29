@@ -131,7 +131,8 @@ def precise_generation(
     img_name, model, clip, tokenizer, 
     image_instance, init_caption,
     token_mask, prompt, logger,
-    max_len=15, top_k=100,temperature=None, alpha=0.7,beta=1,
+    max_len=15, top_k=100,temperature=None, 
+    alpha=0.7,beta=1,theta=2,
     max_iters=20,batch_size=1, verbose=True):
     """ Generate one word at a time, in L->R order """
 
@@ -152,7 +153,6 @@ def precise_generation(
     batch = get_init_text(tokenizer, init_prompt, max_len - len_init_cap, batch_size)
     # print(max_len - max_len_init)
     # batch = get_init_text(tokenizer, prompt, max_len, batch_size)
-    theta = 5
     
     clip_score_sequence = []
     best_clip_score_list = [0] * batch_size
@@ -406,7 +406,8 @@ def generate_caption(img_name,
                     init_caption,
                     token_mask,logger,
                     prompt="", batch_size=1, max_len=15,
-                    top_k=100, temperature=1.0, max_iter=500,alpha=0.7,beta=1,
+                    top_k=100, temperature=1.0, max_iter=500,
+                    alpha=0.7,beta=1,theta=2,
                     generate_order="sequential"):
     # main generation functions to call
     start_time = time.time()
@@ -419,7 +420,8 @@ def generate_caption(img_name,
             image_instance, init_caption,
             token_mask, prompt, logger,
             batch_size=batch_size, max_len=max_len, top_k=top_k,
-            alpha=alpha,beta=beta,temperature=temperature,
+            alpha=alpha,beta=beta,theta=theta,
+            temperature=temperature,
             max_iters=max_iter)
 
     elif generate_order=="sequential":
