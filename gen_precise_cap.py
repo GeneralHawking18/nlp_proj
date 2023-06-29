@@ -2,8 +2,22 @@ from gen_utils import generate_caption
 import json
 import os
 
-def run_caption(args, img_name, img_pil_list, init_caption, lm_model, lm_tokenizer, clip, token_mask, logger, all_results):
 
+def generate_init_cap(model_name, model, processor, device, image_instance = None, image = None):
+    if image_instance:
+        image = processor(image_instance).unsqueeze(0).to(device)
+
+    if model_name == "blip-1":
+        init_cap = model.generate({"image": image})
+    elif model_name == "blip-2":
+        init_cap = model.generate({"image": image})
+    
+    elif model_name == "cnn_lstm":
+        pass
+
+    return init_cap
+
+def run_caption(args, img_name, img_pil_list, init_caption, lm_model, lm_tokenizer, clip, token_mask, logger, all_results):
     image_instance = img_pil_list
     gen_texts, clip_scores = generate_caption(
             img_name,
