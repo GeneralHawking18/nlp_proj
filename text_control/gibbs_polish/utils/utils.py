@@ -4,6 +4,19 @@ import colorlog
 import random
 import torch
 
+def remove_stop_words(args, lm_tokenizer):
+    with open(args.stop_words_path,'r',encoding='utf-8') as stop_words_file:
+        stop_words = stop_words_file.readlines() # Đọc tất cả các stop_words từ file
+        stop_words_ = [stop_word.rstrip('\n') for stop_word in stop_words] # Loại bỏ các dấu xuống dòng của các stop_word, loại bỏ các "\n"
+        stop_words_ += args.add_extra_stopwords
+        stop_ids = lm_tokenizer.convert_tokens_to_ids(stop_words_) # Lấy id của các stop words
+        print(stop_ids)
+
+        token_mask = torch.ones((1,lm_tokenizer.vocab_size)) # Khởi tạo một tensor 2 chiều 1x vocab_size, tât cả = 1, vì sao lại 2 chiều, bởi vì khi stack vào batch dễ hơn, 1 + 1 + 1, chứ vd mỗi V thì stack thành 10 x V khó .
+        for stop_id in stop_ids:
+            token_mask[0,stop_id]=0 # gán tất cá các stop_words đều gán = 0 hết
+        token_mask = token_mask.to(args.device) # Cho vào gpu và cuda.
+    return token_mask
 
 def create_logger(folder, filename):
     log_colors = {
