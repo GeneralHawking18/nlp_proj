@@ -4,4 +4,4 @@ transformers
 torch
 torchvision
 salesforce-lavis
-
+labml-nn

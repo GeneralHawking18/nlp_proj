@@ -1,4 +1,4 @@
-from gen_utils import generate_caption
+from text_control.gibbs_polish.utils.gen_utils import generate_caption
 import json
 import os
 

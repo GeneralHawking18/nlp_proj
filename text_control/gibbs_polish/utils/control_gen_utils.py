@@ -2,9 +2,13 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import random
-from utils import get_init_text, update_token_mask
-from sentiments_classifer import batch_texts_POS_Sentiments_analysis
-from POS_classifier import batch_texts_POS_analysis
+
+"""import sys
+sys.path.append("./text_control/gibbs_polish/")"""
+
+from text_control.gibbs_polish.utils.gen_utils import get_init_text, update_token_mask
+from text_control.gibbs_polish.frameworks.sentiments_classifier import batch_texts_POS_Sentiments_analysis
+from text_control.gibbs_polish.frameworks.POS_classifier import batch_texts_POS_analysis
 
 import time
 
