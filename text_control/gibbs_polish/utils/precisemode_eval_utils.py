@@ -58,7 +58,7 @@ def run_caption(args, img_name, img_pil_list, init_caption, lm_model, lm_tokeniz
     return all_results
 
 
-def gen_coco_cap_json(
+def display(
     args, run_type, 
     lm_model, lm_tokenizer, clip, token_mask, logger,
     train_loader, 
@@ -85,4 +85,8 @@ def gen_coco_cap_json(
                 with open(cur_json_file,'w') as _json:
                     json.dump(all_results, _json)
 
-
+run_caption(
+                    args, name_batch_list, img_batch_pil_list,
+                    init_caption_list,
+                    lm_model,
+                    lm_tokenizer, clip, token_mask, logger, all_results)

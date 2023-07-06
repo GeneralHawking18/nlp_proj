@@ -19,180 +19,6 @@ from labml_nn.sampling.temperature import TemperatureSampler
 
 from text_control.sampling import NucleusSampler
 
-
-def gen_goodcap(blip, vis_processors, image_instance, device):
-    image = vis_processors["eval"](image_instance).unsqueeze(0).to(device)
-    FinalCaption = blip.generate({"image": image})
-    return FinalCaption[0]
-
-
-def sequential_generation(img_name, blip, vis_processors, model, clip, tokenizer, image_instance,token_mask, prompt, logger,
-                          max_len=15, top_k=100,temperature=None, alpha=0.7,beta=1,
-                          max_iters=20,batch_size=1, verbose=True):
-    """ Generate one word at a time, in L->R order """
-
-    seed_len = len(prompt.split())+1
-    image_embeds = clip.compute_image_representation_from_image_instance(image_instance)
-
-    
-    good_cap = gen_goodcap(blip, vis_processors, image_instance, image_embeds.device) 
-    init_prompt = prompt + ' ' + good_cap 
-
-
-    max_len_init = len(init_prompt.split()) 
-    max_len_good_cap = len(good_cap.split()) 
-    # print(max_len_good_cap)
-
-    batch = get_init_text(tokenizer, init_prompt, max_len - max_len_good_cap, batch_size)
-    # print(max_len - max_len_init)
-    # batch = get_init_text(tokenizer, prompt, max_len, batch_size)
-    theta = 5
-    
-    clip_score_sequence = []
-    best_clip_score_list = [0] * batch_size
-    best_caption_list = ['None'] * batch_size
-    inp = torch.tensor(batch).to(image_embeds.device)
-    gen_texts_list = []
-    init_text_embed = clip.compute_text_representation([init_prompt])
-
-    for iter_num in range(max_iters): 
-        for ii in range(max_len):
-            # print(seed_len + ii)
-            token_mask = update_token_mask(tokenizer, token_mask, max_len, ii)
-            inp[:,seed_len + ii] = tokenizer.mask_token_id
-            inp_ = inp.clone().detach()
-            out = model(inp).logits
-
-
-            probs, idxs = generate_caption_step(out, gen_idx=seed_len + ii, mask=token_mask, top_k=top_k, temperature=temperature)
-            topk_inp = inp_.unsqueeze(1).repeat(1,top_k,1)
-            idxs_ = (idxs * token_mask[0][idxs]).long()
-            topk_inp[:,:,ii + seed_len] = idxs_
-
-            topk_inp_batch = topk_inp.view(-1,topk_inp.shape[-1])
-            batch_text_list= tokenizer.batch_decode(topk_inp_batch , skip_special_tokens=True)
-            # print(batch_text_list)
-           
-            clip_score, clip_ref = clip.compute_image_text_similarity_via_raw_text(image_embeds, batch_text_list)
-
-            blip_sim_score, blip_sim_ref = clip.compute_image_text_similarity_via_raw_text(init_text_embed, batch_text_list)
-
-            final_score = alpha * probs + beta * clip_score + theta * blip_sim_score
-            best_clip_id = final_score.argmax(dim=1).view(-1,1)
-
-
-            inp[:,seed_len + ii] = idxs_.gather(1, best_clip_id).squeeze(-1)
-            current_clip_score = clip_ref.gather(1,best_clip_id).squeeze(-1)
-            clip_score_sequence_batch = current_clip_score.cpu().detach().numpy().tolist()
-        if verbose and np.mod(iter_num + 1, 1) == 0:
-            for_print_batch = tokenizer.batch_decode(inp)
-            cur_text_batch= tokenizer.batch_decode(inp,skip_special_tokens=True)
-            for jj in range(batch_size):
-                if best_clip_score_list[jj] < clip_score_sequence_batch[jj]:
-                    best_clip_score_list[jj] = clip_score_sequence_batch[jj]
-                    best_caption_list[jj] = cur_text_batch[jj]
-                logger.info(f"iter {iter_num + 1}, The {jj+1}-th image: {img_name[jj]},"
-                            f"clip score {clip_score_sequence_batch[jj]:.3f}: "+ for_print_batch[jj])
-        gen_texts_list.append(cur_text_batch)
-        clip_score_sequence.append(clip_score_sequence_batch)
-    gen_texts_list.append(best_caption_list)
-    clip_score_sequence.append(best_clip_score_list)
-
-    return gen_texts_list, clip_score_sequence
-
-
-def precise_generation2(
-    img_name, model, clip, tokenizer, 
-    image_instance, init_caption,
-    token_mask, prompt, logger,
-    max_len=15, 
-    top_k=100,temperature=None,
-    
-    alpha=0.7,beta=1,theta=2,
-    max_iters=20,batch_size=1, verbose=True,
-    top_p=0.95):
-    """ Generate one word at a time, in L->R order """
-
-    seed_len = len(prompt.split()) + 1
-    image_embeds = clip.compute_image_representation_from_image_instance(image_instance)
-    
-    init_prompt = prompt + ' ' + init_caption
-    len_init_prompt = len(init_prompt.split()) 
-    len_init_cap = len(init_caption.split()) 
-
-    # print(max_len_good_cap)
-
-    batch = get_init_text(tokenizer, init_prompt, max_len - len_init_cap, batch_size)
-    # print(max_len - max_len_init)
-    # batch = get_init_text(tokenizer, prompt, max_len, batch_size)
-    
-    clip_score_sequence = []
-    best_clip_score_list = [0] * batch_size
-    best_caption_list = ['None'] * batch_size
-    inp = torch.tensor(batch).to(image_embeds.device)
-    gen_texts_list = []
-    init_text_embed = clip.compute_text_representation([init_prompt])
-
-    # top_p_samp = NucleusSampler(0.99, None, temp = 0.5)# TemperatureSampler(0.2))
-  
-    for iter_num in range(max_iters): 
-        for ii in range(max_len):
-            # print(seed_len + ii)
-            token_mask = update_token_mask(tokenizer, token_mask, max_len, ii)
-            inp[:,seed_len + ii] = tokenizer.mask_token_id
-            inp_ = inp.clone().detach()
-            # print(inp.shape)
-            
-            out = model(inp).logits
-            # nucleus_probs = torch.exp(top_p_samp(out[0][ii]))
-
-            # idxs = nucleus_probs.nonzero().view(-1)
-
-            # print(out) # 
-            # print("Out", out.shape)
-            # print(sampling.top_k_top_p_filtering(out, top_p = 0)) # 
-            # print("Top_p function ", sampling.top_p(out))
-
-            probs, idxs = generate_caption_step(out, gen_idx=seed_len + ii, mask=token_mask, top_k=top_k, temperature=temperature)
-            topk_inp = inp_.unsqueeze(1).repeat(1,top_k,1)
-            # print(idxs.shape) # 
-            idxs_ = (idxs * token_mask[0][idxs]).long()
-            # print(idxs_.shape)
-            topk_inp[:,:,ii + seed_len] = idxs_
-
-            topk_inp_batch = topk_inp.view(-1,topk_inp.shape[-1])
-            batch_text_list= tokenizer.batch_decode(topk_inp_batch , skip_special_tokens=True)
-            # print(batch_text_list)2    
-            batch_text_emds = clip.compute_text_representation(batch_text_list)
-            clip_score, clip_ref = clip.compute_image_text_similarity_via_embeddings(image_embeds, batch_text_emds)
-
-
-            cap_sim_score, cap_sim_ref = clip.compute_image_text_similarity_via_embeddings(init_text_embed, batch_text_emds)
-
-            final_score = alpha * probs + beta * clip_score + theta * cap_sim_score
-            best_clip_id = final_score.argmax(dim=1).view(-1,1)
-
-
-            inp[:,seed_len + ii] = idxs_.gather(1, best_clip_id).squeeze(-1)
-            current_clip_score = clip_ref.gather(1,best_clip_id).squeeze(-1)
-            clip_score_sequence_batch = current_clip_score.cpu().detach().numpy().tolist()
-        if verbose and np.mod(iter_num + 1, 1) == 0:
-            for_print_batch = tokenizer.batch_decode(inp)
-            cur_text_batch= tokenizer.batch_decode(inp,skip_special_tokens=True)
-            for jj in range(batch_size):
-                if best_clip_score_list[jj] < clip_score_sequence_batch[jj]:
-                    best_clip_score_list[jj] = clip_score_sequence_batch[jj]
-                    best_caption_list[jj] = cur_text_batch[jj]
-                logger.info(f"iter {iter_num + 1}, The {jj+1}-th image: {img_name[jj]},"
-                            f"clip score {clip_score_sequence_batch[jj]:.3f}: "+ for_print_batch[jj])
-        gen_texts_list.append(cur_text_batch)
-        clip_score_sequence.append(clip_score_sequence_batch)
-    gen_texts_list.append(best_caption_list)
-    clip_score_sequence.append(best_clip_score_list)
-
-    return gen_texts_list, clip_score_sequence
-
-
 @torch.no_grad()
 def precise_generation(
     img_name, model, clip, tokenizer, 
@@ -290,8 +116,52 @@ def precise_generation(
     return gen_texts_list, clip_score_sequence
 
 
+def sequential_generation(img_name, model, clip, tokenizer, image_instance,token_mask, prompt, logger,
+                          max_len=15, top_k=100,temperature=None, alpha=0.7,beta=1,
+                          max_iters=20,batch_size=1, verbose=True):
+    """ Generate one word at a time, in L->R order """
 
+    seed_len = len(prompt.split())+1
+    batch = get_init_text(tokenizer, prompt, max_len, batch_size)
+    image_embeds = clip.compute_image_representation_from_image_instance(image_instance)
+    clip_score_sequence = []
+    best_clip_score_list = [0] * batch_size
+    best_caption_list = ['None'] * batch_size
+    inp = torch.tensor(batch).to(image_embeds.device)
+    gen_texts_list = []
+    for iter_num in range(max_iters): 
+        for ii in range(max_len):
+            token_mask = update_token_mask(tokenizer, token_mask, max_len, ii)
+            inp[:,seed_len + ii] = tokenizer.mask_token_id
+            inp_ = inp.clone().detach()
+            out = model(inp).logits
+            probs, idxs = generate_caption_step(out, gen_idx=seed_len + ii, mask=token_mask, top_k=top_k, temperature=temperature)
+            topk_inp = inp_.unsqueeze(1).repeat(1,top_k,1)
+            idxs_ = (idxs * token_mask[0][idxs]).long()
+            topk_inp[:,:,ii + seed_len] = idxs_
+            topk_inp_batch = topk_inp.view(-1,topk_inp.shape[-1])
+            batch_text_list= tokenizer.batch_decode(topk_inp_batch , skip_special_tokens=True)
+            clip_score, clip_ref = clip.compute_image_text_similarity_via_raw_text(image_embeds, batch_text_list)
+            final_score = alpha * probs + beta * clip_score
+            best_clip_id = final_score.argmax(dim=1).view(-1,1)
+            inp[:,seed_len + ii] = idxs_.gather(1, best_clip_id).squeeze(-1)
+            current_clip_score = clip_ref.gather(1,best_clip_id).squeeze(-1)
+            clip_score_sequence_batch = current_clip_score.cpu().detach().numpy().tolist()
+        if verbose and np.mod(iter_num + 1, 1) == 0:
+            for_print_batch = tokenizer.batch_decode(inp)
+            cur_text_batch= tokenizer.batch_decode(inp,skip_special_tokens=True)
+            for jj in range(batch_size):
+                if best_clip_score_list[jj] < clip_score_sequence_batch[jj]:
+                    best_clip_score_list[jj] = clip_score_sequence_batch[jj]
+                    best_caption_list[jj] = cur_text_batch[jj]
+                logger.info(f"iter {iter_num + 1}, The {jj+1}-th image: {img_name[jj]},"
+                            f"clip score {clip_score_sequence_batch[jj]:.3f}: "+ for_print_batch[jj])
+        gen_texts_list.append(cur_text_batch)
+        clip_score_sequence.append(clip_score_sequence_batch)
+    gen_texts_list.append(best_caption_list)
+    clip_score_sequence.append(best_clip_score_list)
 
+    return gen_texts_list, clip_score_sequence
 
 def shuffle_generation(img_name, model, clip, tokenizer,image_instance,token_mask, prompt, logger,
                           max_len=15, top_k=0,temperature=None, alpha=0.7,beta=1,

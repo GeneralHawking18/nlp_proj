@@ -28,27 +28,10 @@ class MatchModel(nn.Module):
     def compute_image_representation_from_image_instance(self, image):
         pass
 
+    @abstractmethod
     def compute_text_representation(self, text_list):
-        if not self.cuda_has_been_checked:
-            self.check_cuda()
-            self.cuda_has_been_checked = True
-        else:
-            pass
-        # text_list: a list of text
-        text_inputs = self.tokenizer(text_list, padding=True, return_tensors="pt",
-            max_length=self.tokenizer.max_len_single_sentence + 2, truncation=True)
-        # self.tokenizer.max_len_single_sentence + 2 = 77
-        input_ids, attention_mask = text_inputs['input_ids'], text_inputs['attention_mask']
-        if self.cuda_available:
-            input_ids = input_ids.cuda(self.device)
-            attention_mask = attention_mask.cuda(self.device)
-        text_outputs = self.model.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask
-        )
-        text_embeds = text_outputs[1]
-        text_embeds = self.model.text_projection(text_embeds)
-        return text_embeds
+        pas
+        
     
     def compute_image_text_similarity_via_embeddings(self, image_embeds, text_embeds):
         '''
@@ -84,16 +67,6 @@ class CLIP(MatchModel):
         self.tokenizer = CLIPTokenizer.from_pretrained(model_name)
         self.cuda_has_been_checked = False
         print ('CLIP model initialized.')
-
-    def check_cuda(self):
-        self.cuda_available = next(self.model.parameters()).is_cuda
-        self.device = next(self.model.parameters()).get_device()
-        if self.cuda_available:
-            print ('Cuda is available.')
-            print ('Device is {}'.format(self.device))
-        else:
-            print ('Cuda is not available.')
-            print ('Device is {}'.format(self.device))
 
     @torch.no_grad()
     def compute_image_representation_from_image_path(self, image_path):
@@ -146,6 +119,28 @@ class CLIP(MatchModel):
     def compute_image_text_similarity_via_raw_text(self, image_embeds, text_list):
         text_embeds = self.compute_text_representation(text_list)
         return self.compute_image_text_similarity_via_embeddings(image_embeds, text_embeds)
+
+    def compute_text_representation(self, text_list):
+        if not self.cuda_has_been_checked:
+            self.check_cuda()
+            self.cuda_has_been_checked = True
+        else:
+            pass
+        # text_list: a list of text
+        text_inputs = self.tokenizer(text_list, padding=True, return_tensors="pt",
+            max_length=self.tokenizer.max_len_single_sentence + 2, truncation=True)
+        # self.tokenizer.max_len_single_sentence + 2 = 77
+        input_ids, attention_mask = text_inputs['input_ids'], text_inputs['attention_mask']
+        if self.cuda_available:
+            input_ids = input_ids.cuda(self.device)
+            attention_mask = attention_mask.cuda(self.device)
+        text_outputs = self.model.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask
+        )
+        text_embeds = text_outputs[1]
+        text_embeds = self.model.text_projection(text_embeds)
+        return text_embeds
 
     ### -------------------- functions for building index ---------------------- ###
     def compute_batch_index_image_features(self, image_list):
@@ -237,6 +232,28 @@ class ALIGN(MatchModel):
         visual_outputs = self.model.vision_model(pixel_values=pixel_values)
         image_embeds = visual_outputs[1] # [1 x embed_dim]
         return image_embeds
+
+    def compute_text_representation(self, text_list):
+        if not self.cuda_has_been_checked:
+            self.check_cuda()
+            self.cuda_has_been_checked = True
+        else:
+            pass
+        # text_list: a list of text
+        text_inputs = self.tokenizer(text_list, padding=True, return_tensors="pt",
+            max_length=self.tokenizer.max_len_single_sentence + 2, truncation=True)
+        # self.tokenizer.max_len_single_sentence + 2 = 77
+        input_ids, attention_mask = text_inputs['input_ids'], text_inputs['attention_mask']
+        if self.cuda_available:
+            input_ids = input_ids.cuda(self.device)
+            attention_mask = attention_mask.cuda(self.device)
+        text_outputs = self.model.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask
+        )
+        text_embeds = text_outputs[0][:, 0, :]
+        text_embeds = self.model.text_projection(text_embeds)
+        return text_embeds
         
     def compute_image_text_similarity_via_embeddings(self, image_embeds, text_embeds):
         # normalized features
@@ -246,7 +263,8 @@ class ALIGN(MatchModel):
         # cosine similarity as logits
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) / self.model.temperature
         logits_per_image = logits_per_text.t()
-        return logits_per_image.softmax(dim=1), logits_per_image * self.model.temperature
+        
+        return logits_per_image.softmax(dim=1), logits_per_image 
         
     def compute_image_text_similarity_via_raw_text(self, image_embeds, text_list):
         text_embeds = self.compute_text_representation(text_list)

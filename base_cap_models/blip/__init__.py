@@ -26,7 +26,7 @@ class BLIP_1(nn.Module):
     def remove_redundances(self, captions):
         if isinstance(captions, list):
             for i in range(len(captions)):
-                captions[i] = captions[i].replace(self.init_prompt.lower(), '')
+                captions[i] = captions[i].replace(self.init_prompt.lower() + ' ', '')
         else:
-            captions = captions.replace(self.init_prompt.lower(), '')
+            captions = captions.replace(self.init_prompt.lower() + ' ', '')
         return captions
