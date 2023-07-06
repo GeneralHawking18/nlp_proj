@@ -360,7 +360,8 @@ def generate_caption(img_name,
                     init_caption,
                     token_mask,logger,
                     prompt="", batch_size=1, max_len=15,
-                    top_k=100, temperature=1.0, max_iter=500,
+                    top_k=100, top_p = 1 - 1e-5,
+                    temperature=1.0, max_iter=500,
                     alpha=0.7,beta=1,theta=2,
                     generate_order="sequential"):
     # main generation functions to call
@@ -380,7 +381,7 @@ def generate_caption(img_name,
 
     elif generate_order=="sequential":
         print(1)
-        generate_texts, clip_scores = sequential_generation(img_name, blip, vis_processors, model, clip, tokenizer, image_instance, token_mask, prompt, logger,
+        generate_texts, clip_scores = sequential_generation(img_name, model, clip, tokenizer, image_instance, token_mask, prompt, logger,
                                  batch_size=batch_size, max_len=max_len, top_k=top_k,
                                  alpha=alpha,beta=beta,temperature=temperature,
                                  max_iters=max_iter)
