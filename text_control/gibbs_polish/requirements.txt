@@ -1,7 +1,7 @@
 colorlog
 nltk
-transformers==4.30.0
+transformers
 torch
 torchvision
 salesforce-lavis
-labml-nn
+
